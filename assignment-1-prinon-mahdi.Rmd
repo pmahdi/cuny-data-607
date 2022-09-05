@@ -1,0 +1,67 @@
+---
+title: "Assignment 1 – Loading Data into a Data Frame"
+author: "Prinon Mahdi | EMPLID 24365814"
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Introduction
+
+I have chosen to work with the soccer data set, and its associated article is titled [Club Soccer Predictions](https://projects.fivethirtyeight.com/soccer-predictions/). The article basically makes predictions about 40 leagues around the world. A prediction entails the expected standings of teams within a league for the course of the season. However, it is not the prediction part of the data set that interests me the most; it is rather the measurement called the Soccer Power Index (SPI) that is fascinating to me.
+
+I read up on how the index is calculated to see if it made sense to me as an avid viewer. I was immediately hooked by their approach because SPI is cumulative, and it is updated with each game played by the team: It is a self-correcting predictive model.
+
+# The Methodology behind SPI as Presented in [How Our Club Soccer Predictions Work](https://fivethirtyeight.com/methodology/how-our-club-soccer-predictions-work/)
+
+At the beginning of a season, the SPI rating of a team is that of the previous season adjusted by a value that corresponds to the off-season investment or transfer activity of the team. In other words, if a lot of money is spent during the summer transfer window, that has an effect of bolstering the SPI of the team at the start of the season. Then, as the season continues and games are played, the performances are taken into account to adjust the SPI rating. The key concept that really convinces me about the merit of this methodology is that the researchers **make a distinction between result and performance**. As a long-time fan of the game, I am more than aware of the fact that it is quite often the case that the result does not reflect the performance, and the better team ends up drawing or losing the game. So, I would not be on board with a model that only accounts for the result of a game. This model makes use of two indices to adjust the all important SPI throughout the season: the offensive rating and the defensive rating. These ratings reflect the number of goals a team is expected to score and concede each game, and each new game can change the ratings based on both performance and result. That means, not only are the goals actually scored and conceded taken into account, but also the ones that could have occurred are also taken into account, weighed by the context of the game surrounding them.
+
+**I realize this has been a long-winded explanation, but the methodology gets a lot more detailed, and the bare minimum needs to be enumerated to contextualize my choices in cleaning and summarizing the data for comparing the top 6 European soccer leagues.**
+
+# Transformations
+
+#### Loading and Glimpsing the Data
+
+```{r loading-glimpsing-data}
+library("tidyverse")
+spi_global_rankings <- read_csv("https://projects.fivethirtyeight.com/soccer-api/club/spi_global_rankings.csv")
+glimpse(spi_global_rankings)
+```
+
+#### Transforming and Analyzing the Data
+
+Looking at the data, it occurs to me that the season has just started: so for most teams, there is no difference between current rank and previous rank. As such, I will remove the *prev_rank* column. Additionally, I see that teams from many small leagues appear in the data frame, so I filter the data frame to include only the top 6 European soccer leagues: `German Bundesliga`, `Barclays Premier League`, `French Ligue 1`, `Spanish Primera Division`, `Italy Serie A`, `Portuguese Liga`.
+
+```{r removing-prev_rank-filtering-top-6}
+filt_by_league <- spi_global_rankings[spi_global_rankings$league %in% c("German Bundesliga", "Barclays Premier League", "French Ligue 1", "Spanish Primera Division", "Italy Serie A", "Portuguese Liga"), ]
+filt_by_league <- filt_by_league[, -2]
+```
+
+Next, I create a new column called *goal_diff* that calculates the difference between the offensive and defensive ratings (*off* and *def*) to see if the values decrease down the column in correspondence with the decreasing SPI values down the column. Theoretically, the correspondence should be there since SPI is calculated using the offensive and defensive ratings.
+
+Finally, I create a new aggregate data frame grouped by *league* column for calculating the means of the performance metrics (*off*, *def*, *goal_diff*, and *spi*). It is sorted by the descending *spi_mean* column.
+
+```{r goal_diff-mean_df}
+filt_by_league <- filt_by_league %>% mutate(goal_diff = off - def, .after = def)
+mean_df <- filt_by_league %>% group_by(league) %>% summarise_at(.vars = c(-1:-2), .funs = list(mean = mean))
+mean_df
+```
+
+We can see that there is in fact correspondence between a decrease in *goal_diff_mean* and a decrease in *spi_mean*. We can also see that the aggregate data frame **mean_df** reveals that the strongest European league is the `Barclays Premier League`, with the `German Bundesliga`, the `Spanish Primera Division`, the `Italy Serie A`, the `French Ligue 1`, and the `Portuguese Liga` following in that respective order.
+
+Finally, I want to check one more thing that should be interesting. I want to see if the strongest teams are ordered in correspondence with the order of the strongest leagues: i.e., `Barclays Premier League` sides should be the stronger than top `German Bundesliga` sides. To check this, I fetch the top 6 teams in the **spi_global_rankings** data frame, which is already ordered by descending values of the *spi* column. I plan to compare the order of these teams to the order of the leagues to get my answer.
+
+```{r teams-vs-leagues}
+teams_vs_leagues_order <- bind_cols(spi_global_rankings[1:6, "league"], mean_df["league"])
+colnames(teams_vs_leagues_order) <- c("teams_order", "leagues_order")
+teams_vs_leagues_order
+```
+
+The result is surprising because the order of the strongest teams is not in correspondence with the order of the strongest leagues.
+
+# Conclusions
+
+On reflection, I have realized a couple of problems with my approach to transforming/analyzing the data. Firstly, the top 6 European soccer leagues should not be determined based on reputation. I should have identified the list after my analysis by using the *spi_mean* values from **mean_df**; similarly, **mean_df** should have contained all the leagues, not just the top 6 chosen according to reputation. So, filtering out the smaller leagues early in the transformation process was a mistake. Secondly, **mean_df** should have contained the mean of the *rank* column of **filt_by_league** data frame. This mean rank column likely would have reflected the discrepancy between the order of the leagues of the strongest teams and the mean-SPI-sorted order of the strongest leagues by clarifying that a high number of strong teams can lead to a league being deemed the strongest (as is the case for the `Barclays Premier League`), even if the strongest team or teams come from a different league.
