@@ -1,0 +1,87 @@
+---
+title: "Assignment 2 | SQL and R"
+author: "Prinon Mahdi"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+The database I will be connecting to is hosted on Google Cloud. To connect to it, several packages need to be loaded.
+
+```{r library}
+library('tidyverse')
+library('DBI')
+library('RPostgres')
+```
+
+Now, let's set up the connection.
+
+```{r connecting-to-google-cloud}
+con <- dbConnect(
+  Postgres(),
+  dbname = 'postgres',
+  host = '34.132.103.49',
+  port = '5432',
+  user = 'postgres',
+  password = 'postgres')
+```
+
+Checking to see if it worked:
+
+```{r test-query}
+  dbGetQuery(
+    con, 
+    'SELECT *
+    FROM movies;')
+```
+
+It worked! Now, I want to create a single data frame by joining data from both tables in the database.
+
+```{r inner-join-movies-viewers}
+joined_df <- 
+  dbGetQuery(
+    con,
+    'SELECT * FROM viewers
+    INNER JOIN movies
+    ON viewers.movie_id = movies.id;'
+  )
+glimpse(joined_df)
+```
+It seems there are **NA** values in the *rating* column of the data frame. I will resolve this issue in 2 different ways. Firstly, I will remove the **NA** values in R. Secondly, I will modify my query so that the joined data excludes records with **NA** values. In my opinion, excluding the records would be a valid approach since the missing information indicates that the specific viewer did not watch a particular movie, so he or she was unable to rate it.
+
+```{r removing-na-in-r}
+joined_df <- na.omit(joined_df)
+
+# Checking that no NA values remain
+all(complete.cases(joined_df)) == TRUE
+```
+
+Next, I will write a new query to retrieve the data from the database while excluding **NA** records and adding a new column called *adjusted_rating* that scales *rating* values by 2 so that *rating* and *imdb_rating* are comparable.
+
+```{r excluding-na-adjusted_rating}
+df_no_na <-     
+  dbGetQuery(
+    con,
+    'SELECT 
+    index, 
+    name, 
+    movie_id, 
+    rating, 
+    id, 
+    title, 
+    release_yr, 
+    imdb_rating,
+    rating * 2 AS adjusted_rating
+    FROM viewers
+    INNER JOIN movies
+    ON viewers.movie_id = movies.id
+    WHERE rating IS NOT NULL;')
+
+# Checking that no NA values remain
+all(complete.cases(df_no_na)) == TRUE
+
+# Checking that adjusted_rating column has been added
+glimpse(df_no_na)
+```
