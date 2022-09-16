@@ -1,0 +1,92 @@
+---
+title: "Assignment 3"
+author: "Prinon Mahdi"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# 1. Using the 173 majors listed in fivethirtyeight.com’s College Majors dataset [https://fivethirtyeight.com/features/the-economic-guide-to-picking-a-college-major/], provide code that identifies the majors that contain either "DATA" or "STATISTICS".
+
+**Solution**
+
+```{r problem-1}
+library(tidyverse)
+
+df_p1 <- read_csv('https://raw.githubusercontent.com/fivethirtyeight/data/master/college-majors/majors-list.csv')
+
+# Checking to see which columns contain the patterns through coercive behavior of str_detect (in case a data frame is passed as argument, each column's records are collapsed into a single string, then str_detect returns TRUE for each column containing the patterns)
+str_detect(df_p1, '(DATA|STATISTICS)')
+str_subset(df_p1[[2]], pattern = '(DATA|STATISTICS)')
+
+# In a single line of code:
+str_subset(df_p1[[which(str_detect(df_p1, '(DATA|STATISTICS)'))]], pattern = '(DATA|STATISTICS)')
+```
+
+# 2. Write code that transforms the data below:
+
+```{r p2-input, echo = FALSE}
+cat('[1] "bell pepper"  "bilberry"     "blackberry"   "blood orange"
+
+[5] "blueberry"    "cantaloupe"   "chili pepper" "cloudberry"  
+
+[9] "elderberry"   "lime"         "lychee"       "mulberry"    
+
+[13] "olive"        "salal berry"')
+```
+
+# Into a format like this:
+
+```{r p2-output, echo = FALSE}
+cat('c("bell pepper", "bilberry", "blackberry", "blood orange", "blueberry", "cantaloupe", "chili pepper", "cloudberry", "elderberry", "lime", "lychee", "mulberry", "olive", "salal berry")')
+```
+
+**Solution**
+
+```{r problem-2}
+input_v <- '[1] "bell pepper"  "bilberry"     "blackberry"   "blood orange"
+
+[5] "blueberry"    "cantaloupe"   "chili pepper" "cloudberry"  
+
+[9] "elderberry"   "lime"         "lychee"       "mulberry"    
+
+[13] "olive"        "salal berry"'
+
+# Lazy-matching (*? instead of *) is required so that each item becomes an element inside the first and only vector of list_items
+
+list_items <- str_extract_all(string = input_v, pattern = '\\".*?\\"')
+items <- str_c(list_items[[1]], collapse = ', ')
+str_glue('c({items})', items = items)
+```
+
+# 3. Describe, in words, what these expressions will match:
+
+* `(.)\1\1` **Any character that appears 3 times in a row.**
+* `"(.)(.)\\2\\1"` **Any 2 characters that repeat immediately in the reverse order.**
+* `(..)\1` **Any 2 characters that repeat immediately in the same order.**
+* `"(.).\\1.\\1"` **Any single character that repeats 2 more times, with each repetition after another single variable character.**
+* `"(.)(.)(.).*\\3\\2\\1"` **Any 3 characters that repeat in the reverse order after any number (even 0) of variable characters.**
+
+# 4. Construct regular expressions to match **words** that:
+
+**I assume the term "words" refers to actual words and not arbitrary sets of any characters. Additionally, I cannot find any way to do case-insensitive backreferencing, so I am using the lowercase alphabets.**
+
+* Start and end with the same character. `(^|\\s)([a-z])(([a-z]+\\2(\\s|$))|\\2?(\\s|$))`
+
+```{r p4-example-1}
+str_subset(string = c('lol', ' madam', 'cat'), pattern = '(^|\\s)([a-z])(([a-z]+\\2(\\s|$))|\\2?(\\s|$))')
+```
+
+* Contain a repeated pair of letters (e.g. "church" contains "ch" repeated twice.) `(^|\\s)[a-z]*([a-z][a-z])[a-z]*\\2[a-z]*(\\s|$)`
+
+```{r p4-example-2}
+str_subset(string = c('tomato', ' mississippi ', 'what'), pattern = '(^|\\s)[a-z]*([a-z][a-z])[a-z]*\\2[a-z]*(\\s|$)')
+```
+
+* Contain one letter repeated in at least three places (e.g. "eleven" contains three "e"s.) `(^|\\s)[a-z]*([a-z])[a-z]*\\2[a-z]*\\2[a-z]*(\\s|$)`
+
+```{r p4-example-3}
+str_subset(string = c('applepie', ' monsoon ', 'panda'), pattern = '(^|\\s)[a-z]*([a-z])[a-z]*\\2[a-z]*\\2[a-z]*(\\s|$)')
+```
