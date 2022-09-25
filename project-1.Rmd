@@ -1,0 +1,153 @@
+---
+title: "DATA 607 | Project 1"
+author: "Prinon Mahdi"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Loading packages and reading in the data
+
+```{r loading-reading}
+library('tidyverse')
+
+link <- 'https://raw.githubusercontent.com/pmahdi/cuny-data-607/main/proj-1-chess.txt'
+chess_og <- read_delim(
+  file = link, 
+  delim = '|', 
+  col_names = FALSE, 
+  na = c('-----------------------------------------------------------------------------------------', ''), 
+  trim_ws = TRUE,
+  skip = 1, 
+  skip_empty_rows = TRUE)
+
+glimpse(chess_og)
+```
+
+### Transforming the data
+
+It looks like column `X11` consists of only NA values. This is probably because the input file has a '|' at the end of each line, which also happens to be the delimiter character. So, *read_delim()* mistakenly adds on an extra column.
+
+```{r removing-X11}
+# Checking there are no values in X11
+sum(!is.na(chess_og$X11))
+
+# Dropping the column X11
+chess_mod <- chess_og[-11]
+glimpse(chess_mod)
+```
+
+It also seems like every 3rd row is full of NA values. So, let's drop all rows that only have NA values.
+
+```{r dropping-only-na-rows}
+all_na_index <- logical(length = nrow(chess_mod)) 
+
+for (i in 1:nrow(chess_mod)) {
+  all_na_index[i] <- all(is.na(chess_mod[i, ]))
+}
+
+chess_mod <- chess_mod[!all_na_index, ]
+```
+
+Next, new column names are added and the first 2 rows are dropped.
+
+```{r add-colnames-drop-rows-1-2}
+colnames(chess_mod) <- c('id', 'name', 'points', 'round_1', 'round_2', 'round_3', 'round_4', 'round_5', 'round_6', 'round_7')
+
+chess_mod <- chess_mod[c(-1, -2), ]
+```
+
+The next step should be to add 2 extra columns to the data frame for populating with useful information from each player's 2nd row (state name and pre-tournament rating). After information from the second row of each player is added to the 2 columns, each player's second row (so, all the even rows) will be dropped.
+
+```{r cbind-empty-cols}
+chess_mod <- cbind(chess_mod, tibble(state = rep('', nrow(chess_mod)), pre_rating = rep('', nrow(chess_mod))))
+
+for (i in seq(2, nrow(chess_mod), 2)) {
+  chess_mod[i - 1, 'state'] <- chess_mod[i, 'id']
+  chess_mod[i - 1, 'pre_rating'] <- chess_mod[i, 'name']
+}
+
+chess_mod <- chess_mod[-seq(2, nrow(chess_mod), 2), ]
+
+# turns out R automatically assigns rownames corresponding to the previous indices
+head(rownames(chess_mod))
+rownames(chess_mod) <- NULL
+head(rownames(chess_mod))  # much better, less confusing row indices
+```
+
+At this stage, the `pre_rating` column needs to be cleaned so that it contains only the pre-tournament rating of each player. For this, regular expressions will be used alongside the **stringr** package from tidyverse. The plan is to extract the correct information from each row using pattern matching and save that to a vector. Then, if the result looks good, that vector, after coercion to numeric, will update the information in the `pre_rating` column.
+
+```{r clean-pre_rating}
+extracted <- str_extract(string = chess_mod$pre_rating, pattern = ' \\d{3,4}')
+
+# Checking that the extraction went alright
+length(extracted) == nrow(chess_mod); sum(is.na(extracted))
+head(extracted); tail(extracted)
+
+# Need to remove the whitespace in front of each rating
+extracted <- str_trim(string = extracted, side = 'both')
+
+# Converting to numeric
+extracted <- as.numeric(extracted)
+
+# Populating chess_mod$pre_rating with extracted
+chess_mod$pre_rating <- extracted
+```
+
+Almost all of the required information has been isolated in individual columns. Only average pre-tournament opponent rating is left. To get that value, the ids of each player's opponents have to be isolated.
+
+```{r isolate-opponent-ids}
+opp_id <- apply(X = chess_mod[4:10], MARGIN = 2, FUN = function(x) {str_extract(string = x, pattern = '\\d{1,2}')})
+
+colnames(opp_id) <- c('opp_id_r1', 'opp_id_r2', 'opp_id_r3', 'opp_id_r4', 'opp_id_r5', 'opp_id_r6', 'opp_id_r7')
+
+chess_mod <- cbind(chess_mod, opp_id)
+```
+
+After isolating the ids, a new numeric column named `avg_opp_pre_rating` is added to `chess_mod`. It's filled with 0s. The pre-tournament ratings of each player's opponents are fetched and those values are put through *mean()* to get the average opponent rating. Then, this output updates the `avg_opp_pre_rating` column for the corresponding player.
+
+```{r calculating-avg_opp_pre_rating}
+# Creating the column for average opponent rating and filling it with 0
+chess_mod$avg_opp_pre_rating <- rep(0, nrow(chess_mod))
+
+# Using a loop to calculate the avg_opp_pre_rating value for each player
+for (i in 1:nrow(chess_mod)) {
+  chess_mod[i, 'avg_opp_pre_rating'] <- 
+    round(
+      mean(
+        chess_mod[
+          as.character(chess_mod[i, 13:19]), 
+          'pre_rating'], 
+        na.rm = TRUE
+        )
+      )
+}
+```
+
+Finally, all the required information has been isolated in individual columns. Those columns will be subsetted and saved to a new data frame named `chess_output`.
+
+```{r creating-output-dataframe}
+chess_output <- chess_mod[, c('name', 'state', 'points', 'pre_rating', 'avg_opp_pre_rating')]
+
+colnames(chess_output) <- c('name', 'state', 'total_points', 'player_rating', 'avg_opp_rating')
+
+# Converting total_points column to a numeric
+chess_output$total_points <- as.numeric(chess_output$total_points)
+glimpse(chess_output)
+```
+The final task is exporting `chess_output` to a csv file. The **readr** package's *write_csv* function can be used. 
+
+```{r exporting-chess_output}
+write_csv(
+  x = chess_output, 
+  file = './chess_output.csv', 
+  na = 'NA', 
+  append = FALSE, 
+  col_names = TRUE, 
+  quote = 'needed', 
+  escape = 'double', 
+  eol = '\n'
+)
+```
