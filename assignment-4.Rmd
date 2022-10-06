@@ -1,0 +1,97 @@
+---
+title: "Assignment 4"
+author: "Prinon Mahdi"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+```
+
+## Reading in the Data
+
+```{r}
+arrival_data <- read_csv(file = 'https://raw.githubusercontent.com/pmahdi/cuny-data-607/main/assignment-4-arrival_data.csv')
+arrival_data
+```
+
+## Data Wrangling
+
+Adding missing headers:
+
+```{r}
+colnames(arrival_data)
+colnames(arrival_data) <- c('airline', 'arrival_status', 'Los Angeles', 'Phoenix', 'San Diego', 'San Francisco', 'Seattle')
+colnames(arrival_data)
+```
+
+Dropping the empty 3rd row and imputing the missing values in `airline`:
+
+```{r}
+arrival_data <- arrival_data %>% 
+  drop_na(arrival_status) %>% 
+  fill(airline, .direction = 'down')
+arrival_data
+```
+
+Next, the data frame needs to be pivoted to the long format so that each column corresponds to a variable:
+
+```{r}
+arrival_data <- arrival_data %>% 
+  pivot_longer(
+    cols = -c(1:2),
+    names_to = 'airport',
+    values_to = 'flights'
+  )
+arrival_data
+```
+
+## Data Analysis
+
+Finding the ratio of all on time flights to all delayed flights:
+
+```{r}
+all_table <- arrival_data %>% 
+  group_by(arrival_status) %>% 
+  summarize(n_flights = sum(flights))
+
+all_ratio <- all_table[1, 2] / all_table[2, 2]
+```
+
+Finding the ratio of on time flights to delayed flights per airline:
+
+```{r}
+airlines_table <- arrival_data %>% 
+       group_by(airline, arrival_status) %>% 
+       summarize(n_flights = sum(flights))
+
+alaska_ratio <- airlines_table[1, 3] / airlines_table[2, 3]
+am_west_ratio <- airlines_table[3, 3] / airlines_table[4, 3]
+```
+
+Finding the ratio of on time flights to delayed flights per airport:
+
+```{r}
+airports_table <- arrival_data %>% 
+  group_by(airport, arrival_status) %>% 
+  summarize(n_flights = sum(flights))
+
+la_ratio <- airports_table[1, 3] / airports_table[2, 3]
+px_ratio <- airports_table[3, 3] / airports_table[4, 3]
+sd_ratio <- airports_table[5, 3] / airports_table[6, 3]
+sf_ratio <- airports_table[7, 3] / airports_table[8, 3]
+se_ratio <- airports_table[9, 3] / airports_table[10, 3]
+```
+
+Presenting all the ratios in a single data frame:
+
+```{r}
+ratio_df <- tibble(flight_group = c('all_flights', 'alaska_airlines', 'am_west_airlines', 'los_angeles', 'phoenix', 'san_diego', 'san_francisco', 'seattle'), flight_ratio = rep(NA, length.out = 8))
+
+ratio_df['flight_ratio'] <- rbind(all_ratio, alaska_ratio, am_west_ratio, la_ratio, px_ratio, sd_ratio, sf_ratio, se_ratio)
+
+ratio_df
+```
+
+**Conclusion:** Between the airlines, AM WEST comes out ahead in terms of having fewer delays. Meanwhile, Phoenix seems to be the destination to go to if one's only objective is to escape the authorities as quickly as possible. 
