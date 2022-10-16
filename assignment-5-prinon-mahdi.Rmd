@@ -1,0 +1,239 @@
+---
+title: 'Assignment 5: Working with XML and JSON in R'
+author: "Prinon Mahdi"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(xml2)
+library(rjson)
+library(htmltab)
+```
+
+# XML
+
+First step is reading in the xml data, and then extracting the relevant information from various nodes by navigating with xpath.
+
+```{r read-parse-xml}
+xml_file_url <- 'https://raw.githubusercontent.com/pmahdi/cuny-data-607/main/assignment-5-books.xml'
+xml_tree <- read_xml(x = xml_file_url)
+
+all_titles_atomic <- xml_text(
+  xml_find_all(
+    xml_tree, '/books/book/title'
+    )
+  )
+
+all_authors_atomic <- xml_text(
+  xml_find_all(
+    xml_tree, '/books/book/author'
+    )
+  )
+
+book1_chapters_atomic <- xml_text(
+  xml_find_all(
+    xml_tree, '/books/book[1]/chapters/chapter'
+    )
+  )
+
+book2_chapters_atomic <- xml_text(
+  xml_find_all(
+    xml_tree, '/books/book[2]/chapters/chapter'
+    )
+  )
+
+book3_chapters_atomic <- xml_text(
+  xml_find_all(
+    xml_tree, '/books/book[3]/chapters/chapter'
+    )
+  )
+
+all_pages_atomic <- xml_text(
+  xml_find_all(
+    xml_tree, '/books/book/pages'
+    )
+  )
+
+all_formats_atomic <- xml_text(
+  xml_find_all(
+    xml_tree, '/books/book/format'
+    )
+  )
+```
+
+With the messy part completed, now it's a matter of combining and organizing the information in a tidy way. To that end, first I am going to create a tibble that gives basic information on each of the 3 titles.
+
+```{r xml-tibble-books}
+xml_books <- tibble(
+  title = all_titles_atomic, 
+  authors = c(2, 1, 1), 
+  chapters = c(length(book1_chapters_atomic), 
+               length(book2_chapters_atomic), 
+               length(book3_chapters_atomic)
+               ), 
+  pages = as.numeric(all_pages_atomic), 
+  format = all_formats_atomic
+  )
+```
+
+Next, I will create a tibble that pairs the authors with their respective titles.
+
+```{r xml-tibble-authors}
+xml_authors <- tibble(
+  author = c(
+    all_authors_atomic[1], 
+    all_authors_atomic[4], 
+    all_authors_atomic[2], 
+    all_authors_atomic[3]
+    ), 
+  title = c(
+    all_titles_atomic[1], 
+    all_titles_atomic[3], 
+    all_titles_atomic[1], 
+    all_titles_atomic[2]
+    )
+  )
+```
+
+Finally, all that's left is to create a tibble for pairing titles with their corresponding chapters.
+
+```{r xml-tibble-chapters}
+xml_chapters_book1 <- tibble(
+  title = all_titles_atomic[1], 
+  chapter = book1_chapters_atomic
+)
+
+xml_chapters_book2 <- tibble(
+  title = all_titles_atomic[2], 
+  chapter = book2_chapters_atomic
+)
+
+xml_chapters_book3 <- tibble(
+  title = all_titles_atomic[3], 
+  chapter = book3_chapters_atomic
+)
+
+xml_chapters <- bind_rows(xml_chapters_book1, 
+                          xml_chapters_book2, 
+                          xml_chapters_book3)
+```
+
+The three tibbles `xml_books`, `xml_authors`, and `xml_chapters` present the data stored in the original xml file in a tidy way. I have tried to stick to the philosophy of having each column as a variable, each row as an observation, and each cell as a single value. That is why I have felt it necessary to split the data into 3 separate tibbles. Let's have a peek at the final result:
+
+```{r xml-final}
+xml_books
+xml_authors
+glimpse(xml_chapters)
+# Showing the first and last 5 rows of xml_chapters
+xml_chapters %>% 
+  slice(c(head(row_number(), 5), tail(row_number(), 5)))
+```
+
+# JSON
+
+First and foremost, the json file has to be read into the R environment.
+
+```{r read-json}
+json_file_url <- 'https://raw.githubusercontent.com/pmahdi/cuny-data-607/main/assignment-5-books.json'
+json_list <- fromJSON(file = json_file_url)
+```
+
+As seen previously, the information I have chosen to include about my books requires me to create multiple tibbles to present the data in a tidy way. However, it **is** possible to organize the information in a single data structure if the tidy philosophy is disregarded. For example: 
+
+```{r json-dirty}
+json_dirty <- sapply(json_list, `[`)
+knitr::kable(json_dirty)
+```
+
+This is an extremely ugly way to organize and display the information. So, I will now tidy the data step by step as I did in the XML section.
+
+```{r json-dirty-parse}
+# Getting all the titles in one character vector
+json_title_atomic <- character()
+for (i in c(1, 6, 11)) {
+  json_title_atomic <- append(x = json_title_atomic, values = json_dirty[[i]])
+}
+# Getting all the authors in one character vector
+json_author_atomic <- character()
+for (i in c(2, 7, 12)) {
+  json_author_atomic <- 
+    append(x = json_author_atomic, values = json_dirty[[i]])
+}
+json_author_atomic[c(2, 4)] <- json_author_atomic[c(4, 2)]
+# Extracting the chapters of each book separately, then matching them with their corresponding title
+json_book_1_chapters <- tibble(title = json_title_atomic[1], 
+                               chapter = json_dirty[[3]])
+json_book_2_chapters <- tibble(title = json_title_atomic[2], 
+                               chapter = json_dirty[[8]])
+json_book_3_chapters <- tibble(title = json_title_atomic[3], 
+                               chapter = json_dirty[[13]])
+
+# Getting all the page counts in one character vector
+json_pages_atomic <- numeric()
+for (i in c(4, 9, 14)) {
+  json_pages_atomic <- 
+    append(x = json_pages_atomic, values = json_dirty[[i]])
+}
+# Getting all the publication formats in one character vector
+json_format_atomic <- character()
+for (i in c(5, 10, 15)) {
+  json_format_atomic <- 
+    append(x = json_format_atomic, values = json_dirty[[i]])
+}
+```
+
+With all the necessary pieces parsed, it's time to recombine them to create nice and tidy tibbles.
+
+```{r json-tidy-tibbles}
+json_books <- tibble(
+  title = json_title_atomic, 
+  authors = c(2, 1, 1), 
+  chapters = c(length(json_dirty[[3]]), length(json_dirty[[8]]), 
+               length(json_dirty[[13]])), 
+  pages = json_pages_atomic, 
+  format = json_format_atomic
+)
+
+json_authors <- tibble(
+  author = json_author_atomic, 
+  title = c(json_title_atomic[1], json_title_atomic[3], json_title_atomic[2], 
+            json_title_atomic[1])
+)
+
+json_chapters <- bind_rows(json_book_1_chapters, 
+                          json_book_2_chapters, 
+                          json_book_3_chapters)
+
+json_books
+json_authors
+glimpse(json_chapters)
+# Showing the first and last 5 rows of json_chapters
+json_chapters %>%
+  slice(c(head(row_number(), 5), tail(row_number(), 5)))
+```
+
+# HTML
+
+Reading HTML data into R and creating tidy data structures is far easier than doing so with either JSON or XML. A very convenient package `htmltab` exists for this purpose, and I plan to use it, even though doing so almost feels like cheating because it's so easy.
+
+```{r html-reading-in-dataframe}
+html_file_url = 'https://raw.githubusercontent.com/pmahdi/cuny-data-607/main/assignment-5-books.html'
+html_books <- as_tibble(htmltab(doc = html_file_url, which = 1))
+html_authors <- as_tibble(htmltab(doc = html_file_url, which = 2))
+html_chapters <- as_tibble(htmltab(doc = html_file_url, which = 3))
+
+# Adding some extra information to html_books and shuffling the column order of html_authors
+html_books <- html_books %>% 
+  mutate(authors = c(2, 1, 1), chapters = c(11, 23, 23), .after = title)
+html_authors[c(1, 2)] <- html_authors[c(2, 1)]
+colnames(html_authors) <- c('author', 'title')
+
+html_books
+html_authors
+glimpse(html_chapters)
+# Showing the first and last 5 rows of html_chapters
+html_chapters %>%
+  slice(c(head(row_number(), 5), tail(row_number(), 5)))
+```
