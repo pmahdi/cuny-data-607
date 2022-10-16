@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<books>
+	<book>
+		<title>The Art of Data Science | A Guide for Anyone Who Works with Data</title>
+		<author>Roger D. Peng</author>
+		<author>Elizabeth Matsui</author>
+		<chapters>
+			<chapter>Data Analysis as Art</chapter>
+			<chapter>Epicycles of Analysis</chapter>
+			<chapter>Stating and Refining the Question</chapter>
+			<chapter>Using Models to Explore Your Data</chapter>
+			<chapter>Inference: A Primer</chapter>
+			<chapter>Formal Modeling</chapter>
+			<chapter>Inference vs. Prediction: Implications for Modeling Strategy</chapter>
+			<chapter>Interpreting Your Results</chapter>
+			<chapter>Communication</chapter>
+			<chapter>Concluding Thoughts</chapter>
+		</chapters>
+		<pages>155</pages>
+		<format>pdf</format>
+	</book>
+	<book>
+		<title>Doing Bayesian Data Analysis | A Tutorial with R and BUGS</title>
+		<author>John K. Kruschke</author>
+		<chapters>
+			<chapter>This Book's Organization</chapter>
+			<chapter>Introduction</chapter>
+			<chapter>What is This Stuff Called Probability</chapter>
+			<chapter>Bayes' Rule</chapter>
+			<chapter>Inferring a Binomial Proportion via Exact Mathematical Analysis</chapter>
+			<chapter>Inferring a Binomial Proportion via Grid Approximation</chapter>
+			<chapter>Inferring a Binomial Proportion via the Metropolis Algorithm</chapter>
+			<chapter>Inferring Two Binomial Proportions via Gibbs Sampling</chapter>
+			<chapter>Bernoulli Likelihood with Hierarchical Prior</chapter>
+			<chapter>Hierarchical Modeling and Model Comparison</chapter>
+			<chapter>Null Hypothesis Significance Testing</chapter>
+			<chapter>Bayesian Approaches to Testing a Point (Null) Hypothesis</chapter>
+			<chapter>Goals, Power, and Sample Size</chapter>
+			<chapter>Overview of the Generalized Linear Model</chapter>
+			<chapter>Metric Predicted Variable on a Single Group</chapter>
+			<chapter>Metric Predicted Variable with One Metric Predictor</chapter>
+			<chapter>Metric Predicted Variable with Multiple Metric Predictors</chapter>
+			<chapter>Metric Predicted Variable with One Nominal Predictor</chapter>
+			<chapter>Metric Predicted Variable with Multiple Nominal Predictors</chapter>
+			<chapter>Dichotomous Predicted Variable</chapter>
+			<chapter>Ordinal Predicted Variable</chapter>
+			<chapter>Contingency Table Analysis</chapter>
+			<chapter>Tools in the Trunk</chapter>
+		</chapters>
+		<pages>829</pages>
+		<format>epub</format>
+	</book>
+	<book>
+		<title>R Programming for Data Science</title>
+		<author>Roger D. Peng</author>
+		<chapters>
+			<chapter>History and Overview of R</chapter>
+			<chapter>Getting Started with R</chapter>
+			<chapter>R Nuts and Bolts</chapter>
+			<chapter>Getting Data In and Out of R</chapter>
+			<chapter>Using the readr Package</chapter>
+			<chapter>Using Textual and Binary Formats for Storing Data</chapter>
+			<chapter>Interfaces to the Outside World</chapter>
+			<chapter>Subsetting R Objects</chapter>
+			<chapter>Vectorized Operations</chapter>
+			<chapter>Dates and Times</chapter>
+			<chapter>Managing Data Frames with the dplyr package</chapter>
+			<chapter>Control Structures</chapter>
+			<chapter>Functions</chapter>
+			<chapter>Scoping Rules of R</chapter>
+			<chapter>Coding Standards for R</chapter>
+			<chapter>Loop Functions</chapter>
+			<chapter>Regular Expressions</chapter>
+			<chapter>Debugging</chapter>
+			<chapter>Profiling R Code</chapter>
+			<chapter>Simulation</chapter>
+			<chapter>Data Analysis Case Study: Changes in Fine Particle Air Pollution in the U.S.</chapter>
+			<chapter>Parallel Computation</chapter>
+			<chapter>Why I Indent My Code 8 Spaces</chapter>
+		</chapters>
+		<pages>176</pages>
+		<format>pdf</format>
+	</book>
+</books>
