@@ -1,0 +1,30 @@
+---
+title: 'Assignment 6: Web APIs'
+author: "Prinon Mahdi"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(jsonlite)
+library(tidyverse)
+```
+
+I have decided to read in data from the **Books API**. In particular, I will pull the most recent bestsellers list for fiction (both print and ebook).
+
+```{r}
+link <- 'https://api.nytimes.com/svc/books/v3/lists/current/combined-print-and-e-book-fiction.json?api-key=EtTLK80hGeDW3v0ipV1Rmr5tBL7V1rSk'
+json_list <- fromJSON(link) 
+current_fictions <- as_tibble(json_list$results$books)
+glimpse(current_fictions)
+```
+
+It is no use cleaning the data because this bestsellers list is updated weekly. A column devoid of any information this week might have relevant information next week, so it can't be dropped. However, it makes sense to create a subset of the main dataframe so that only the essential information (title, author, and description) is readily available for quick perusal.
+
+```{r}
+basic_info <- current_fictions %>% 
+  select(title, author, description)
+knitr::kable(basic_info)
+```
+
+Overall, this notebook can be run weekly to get the up-to-date bestsellers list for fiction from The New York Times.
