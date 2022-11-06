@@ -1,0 +1,345 @@
+---
+title: 'Assignment 7: Sentiment Analysis'
+author: "Prinon Mahdi"
+output:
+  html_document:
+    toc: true
+    theme: united
+    urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(tidytext)
+library(janeaustenr)
+library(wordcloud)
+library(gutenbergr)  # May require installation from archive via install_version("gutenbergr", version = "0.2.1", repos = "http://cran.us.r-project.org")
+library(lexicon)
+```
+
+# Studying and running the code of *Text Mining with R | Chapter 2*
+
+### Sentiment analysis with inner join
+
+Firstly, Jane Austen's books, after being imported by the `janeaustenr` package, are converted to the tidy format for sentiment analysis. However, before the analysis is done, 2 new columns are added to indicate the line and chapter position of each word. Also, the output column for the unnesting of the text is deliberately named "word". As "word" is also the name of columns of interest from `tidytext`'s various dictionaries for sentiment analysis and function word (stop word) filtering, having the common name makes it easier to perform inner join and anti join operations. 
+
+```{r}
+tidy_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, 
+                                regex("^chapter [\\divxlc]", 
+                                      ignore_case = TRUE)))) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+```
+
+Next, sentiment analysis will be done on Jane Austen's *Emma* using the lexicon *NRC* that is found in `tidytext`. To be more specific, we are interested in finding all the words in *Emma* with a joyous connotation. To that end, we can take a subset of *NRC* that only contains words that are categorized as expressing the sentiment of "joy". Then, an inner join between the words of *Emma* and the words of the joy lexicon will get us the desired "joy" words in *Emma*.
+
+```{r}
+nrc_joy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+tidy_books %>%
+  filter(book == "Emma") %>%
+  inner_join(nrc_joy) %>%
+  count(word, sort = TRUE)
+```
+
+In the following section, change in sentiment in all of Austen's novels will be visualized. To do this, first we need to use a different lexicon named *Bing* that categorizes words into either "positive" or "negative" categories. Then, using inner_join() on the `word` column of both tibbles (`word` is passed as the argument by default because it is the only common column between the 2 tibbles), we can get all the words that are categorized as either positive or negative. After that, the words are assigned to groups of 80 consecutive lines, beginning with the first line and ending with the last. The group designation of each word is saved in the `index` column. That means, words in lines 1 to 79 would be assigned the index 0, then those in lines 80 to 159 would be assigned the index 1, and so forth. Finally, a net sentiment score is calculated per index by subtracting the negative count from the positive count. 
+
+> Each novel is separated into groups of 80 lines for this particular sentiment analysis because finding the net score on groups too big would return a value close to 0. Meanwhile, if each group is too small, then the sentiment scores would fluctuate erratically and not represent the true narrative flow of the novel.
+
+```{r}
+jane_austen_sentiment <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(book, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+```
+
+Now, we are ready to plot the data with `index` as the explanatory variable and sentiment as the `response` variable.
+
+```{r}
+ggplot(jane_austen_sentiment, aes(index, sentiment, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~book, ncol = 2, scales = "free_x")
+```
+
+The graphs seem to suggest that *Persuasion* is Austen's most consistently-positive novel. Interesting!
+
+### Comparing the three sentiment dictionaries
+
+In `tidytext`, there are 3 sentiment lexicons: *NRC*, *Bing*, and *AFINN*. To see how they are different from each other, all of them will be used to perform the task of tracking changes in the narrative arc of Jane Austen's *Pride and Prejudice*.
+
+Using *AFINN*:
+
+```{r}
+# Selecting only Pride & Prejudice
+pride_prejudice <- tidy_books %>% 
+  filter(book == "Pride & Prejudice")
+
+# Finding the sentiment value of each narrative section called index
+afinn <- pride_prejudice %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(index = linenumber %/% 80) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+```
+
+In the chunk above, we are again performing our sentiment analysis on indices comprising 80 lines. Additionally, since the *AFINN* lexicon categorizes words on a scale of -5 to 5 (with -5 being the most negative and 5 being the most positive), we are not adding the counts of positive and negative words. Rather, we are adding the sentiment value of all words within each index to find the net sentiment score for that index.
+
+Using *Bing* and *NRC*:
+
+```{r}
+bing_and_nrc <- bind_rows(
+  pride_prejudice %>% 
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  pride_prejudice %>% 
+    inner_join(get_sentiments("nrc") %>% 
+                 filter(sentiment %in% c("positive", 
+                                         "negative"))
+    ) %>%
+    mutate(method = "NRC")) %>%
+  count(method, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+```
+
+In the case of *Bing*, the inner join is simple because all its words are already categorized as either "positive" or "negative". However, for *NRC*, after the inner join, we have to filter for only the categories of "positive" and "negative". Additionally, as was the case previously, sentiment analysis is done on indices consisting of 80 consecutive lines. Furthermore, unlike *AFINN*, the difference of count values for positive and negative words are used for each index to get the net sentiment value. This is because the sentiment categorization is done qualitatively under *Bing* and *NRC*, while it is done quantitatively under *AFINN*.
+
+Visualizing and comparing all the results:
+
+```{r}
+bind_rows(afinn, 
+          bing_and_nrc) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+
+As we can see, though all three lexicons return a similar trend in sentiment change, there are some differences. For instance, it is immediately clear that *NRC* has fewer negatives indices than the other 2. Why is this? Let's see.
+
+```{r}
+# Positive and negative words in NRC
+get_sentiments("nrc") %>% 
+  filter(sentiment %in% c("positive", "negative")) %>% 
+  count(sentiment)
+
+# Positive and negative words in Bing
+get_sentiments("bing") %>% 
+  count(sentiment)
+```
+
+So, *NRC* has fewer negative indices because the lexicon has a higher ratio of positive to negative words than that of *Bing*.
+
+### Most common positive and negative words
+
+In this section, we will look closer at the individual words themselves rather than looking at the overall change of sentiment within narrative arcs. This will be done in regard to all the novels in `janeaustenr`.
+
+```{r}
+bing_word_counts <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+head(bing_word_counts)
+```
+
+Now, let's visualize the data.
+
+```{r}
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+### Wordcloud for all the novels
+
+We can easily create a wordcloud for `janeaustenr` using the `wordcloud` package. Before we do so, we need to filter out the function words using the `stop_words` tibble from `tidytext`.
+
+```{r}
+tidy_books %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+```
+
+Looks like "time" is the most common word among Austen's novels.
+
+### Sentiment analysis beyond the word level
+
+Sentiment analysis at the word level requires the production of unigrams (single words) through the use of the **unnest_tokens()** function. However, this same function can be used to produce text units beyond unigrams: like sentences. The following code does exactly this:
+
+```{r}
+p_and_p_sentences <- tibble(text = prideprejudice) %>% 
+  unnest_tokens(sentence, text, token = "sentences")
+
+p_and_p_sentences$sentence[2]
+```
+
+However, it is possible that we are interested in defining a text unit ourselves. In that case, we can pass "regex" to the parameter *token* in **unnest_tokens()** to indicate that we want to define our own text unit with a regex pattern. In the code below, this is done to break the text down into chapters. So, each token produced by the function is a chapter of the novel.
+
+```{r}
+austen_chapters <- austen_books() %>%
+  group_by(book) %>%
+  unnest_tokens(chapter, text, token = "regex", 
+                pattern = "Chapter|CHAPTER [\\dIVXLC]") %>%
+  ungroup()
+
+austen_chapters %>% 
+  group_by(book) %>% 
+  summarise(chapters = n())
+```
+
+To give an example of the type of analysis we can do on the level of chapters, let's find the most negative chapter from each of Austen's novels.
+
+```{r}
+bingnegative <- get_sentiments("bing") %>% 
+  filter(sentiment == "negative")
+
+wordcounts <- tidy_books %>%
+  group_by(book, chapter) %>%
+  summarize(words = n())
+
+tidy_books %>%
+  semi_join(bingnegative) %>%
+  group_by(book, chapter) %>%
+  summarize(negativewords = n()) %>%
+  left_join(wordcounts, by = c("book", "chapter")) %>%
+  mutate(ratio = negativewords/words) %>%
+  filter(chapter != 0) %>%
+  slice_max(ratio, n = 1) %>% 
+  ungroup()
+```
+
+# Extending the code with my own analyses
+
+Before I get started with extending the code, I need to select a book to do my analyses on.
+
+```{r}
+# Importing The Hound of the Baskervilles text using the gutenbergr package
+hound <- gutenberg_metadata %>% 
+  filter(title == 'The Hound of the Baskervilles', has_text == TRUE) %>% 
+  slice(1) %>% 
+  gutenberg_download()
+
+# Adding chapter and line information to each row
+hound <- hound %>% 
+  mutate(
+    line = row_number(), 
+    chapter = cumsum(
+      str_detect(text, 
+                 regex('^Chapter \\d{1,2}.$', ignore_case = TRUE))
+      )
+    ) %>% 
+  ungroup() %>% 
+  filter(chapter > 0)
+```
+
+### Common words
+
+It makes sense to begin the analysis with a visual of the common words in "The Hound of the Baskervilles" (excluding function words).
+
+```{r}
+hound %>% 
+  unnest_tokens(word, text) %>% 
+  anti_join(stop_words) %>% 
+  count(word, sort = TRUE) %>% 
+  ungroup() %>% 
+  with(wordcloud(word, n, max.words = 50))
+```
+
+"The Hound of the Baskervilles" is set in the Victorian era, a time period well known for its social etiquettes. So, it makes sense that the most common word is "sir". "moor" and "holmes" are also expected, seeing as the main character is Sherlock Holmes, and the story takes place in a moor. "henry", "watson", and "mortimer" are of course other characters in the story. The appearance of "baskerville" and "hound" is self-explanatory.
+
+### Sentiment analysis: Adjectives of "The Hound of the Baskervilles"
+
+"The Hound of the Baskervilles" is a gothic mystery novel. The setting comprises moors, swaps, dark nights, howls, and will-o'-the-wisps. So, I expect the novel to be rich in descriptive words, meaning adjectives. Let's see if that's the case using the **parts_of_speech** lexicon from the package `tidytext`. This lexicon categorizes words according to the their part of speech.
+
+```{r}
+# All the adjectives in the novel
+hound_adj <- hound %>% 
+  unnest_tokens(word, text) %>% 
+  anti_join(stop_words) %>% 
+  semi_join(
+  parts_of_speech %>% 
+    filter(pos == 'Adjective')
+  )
+
+# All the nouns in the novel
+hound_noun <- hound %>% 
+  unnest_tokens(word, text) %>% 
+  anti_join(stop_words) %>% 
+  semi_join(
+  parts_of_speech %>% 
+    filter(pos == 'Noun')
+  )
+
+# The ratio between adjectives and nouns
+adj_ratio <- nrow(hound_adj) / nrow(hound_noun)
+```
+
+According to the results of the analysis, there are `r nrow(hound_adj)` adjectives in "The Hound of the Baskervilles". To give a relative measure of how high that number is, I found the ratio between the number of adjectives and the number of nouns because adjectives are descriptors of nouns. The ratio is `r adj_ratio`.
+
+To see a visual representation of the most common adjectives:
+
+```{r}
+hound_adj %>% 
+  count(word, name = 'number') %>% 
+  slice_max(order_by = number, n = 5) %>% 
+  ungroup() %>% 
+  ggplot(mapping = aes(x = reorder(word, -number), y = number, fill = word)) + 
+  geom_col(show.legend = FALSE) + 
+  labs(title = 'Adjectives of The Hound of the Baskervilles', x = 'word', y = NULL)
+```
+
+I suspect "found"'s inclusion is inappropriate within the context of this novel. In a mystery novel, "found" most likely refers to the verb. Overall, seeing "light" (in reference to will-o'-the-wisps) and "black" as the most frequent adjectives reinforces my belief that "The Hound of the Baskervilles" has a very gothic setting.
+
+### Sentiment analysis: Nouns of "The Hound of the Baskervilles"
+
+Let's see if the nouns of the novel back up my assessment about the novel's genre being gothic.
+
+```{r}
+hound_noun %>% 
+  count(word, sort = TRUE) %>% 
+  ungroup() %>% 
+  with(wordcloud(word, n, max.words = 50))
+```
+
+There are certainly some gothic words to be found in that wordcloud: moor, evening, death, night, dark, black, and light.
+
+### Sentiment analysis: narrative arc
+
+Finally, I want to get a feel for the narrative arc of the story by using the lexicon **hash_sentiment_jockers** from the package `lexicon`. The words in the lexicon are rated from -1 to 1. A more negative value indicates a more negative word and vice versa.
+
+```{r}
+hound %>% 
+  unnest_tokens(word, text) %>%
+  inner_join(y = hash_sentiment_jockers, by = c('word' = 'x')) %>% 
+  group_by(chapter) %>% 
+  summarize(sentiment = sum(y)) %>% 
+  ungroup() %>% 
+  ggplot(mapping = aes(x = chapter, y = sentiment)) + 
+  geom_line(color = 'cyan') + 
+  scale_x_continuous(breaks = 1:15) + 
+  labs(title = 'Narrative arc of The Hound of the Baskervilles', 
+       x = 'chapter', y = 'sentiment_score')
+```
+
+Looking at the narrative arc, it looks like there are 3 main low points within the story: chapters 9, 12, and 14. Considering the plot of the story, these low points make sense. In chapter 9, there are 2 major scenes of conflict. In chapter 12, there are revelations about lies and affairs, and there is also a death. Meanwhile, chapter 14 is the climax of the story with another attempted murder and the escape of the antagonist (though it's assumed that Stapleton dies, there is no confirmation). So, it makes sense that those chapters of "The Hound of the Baskervilles" would have the most negative sentiment ratings. The fact that this novel's narrative arc fluctuates up and down is also reasonable considering it is a mystery novel that has various murders and revelations sprinkled throughout the story.
+
+# Reference:
+
+(Text Mining with R | Chapter 2)[https://www.tidytextmining.com/sentiment.html]
