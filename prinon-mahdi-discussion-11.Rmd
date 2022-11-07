@@ -1,0 +1,61 @@
+---
+title: "Discussion 11 | Recommender Systems"
+author: "Prinon Mahdi"
+output: 
+  html_document:
+    latex_engine: xelatex
+    urlcolor: blue
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Discussion prompt:
+
+Your task is to analyze an existing recommender system that you find interesting. You should:
+
+1. Perform a Scenario Design analysis as described below.  Consider whether it makes sense for your selected recommender system to perform scenario design twice, once for the organization (e.g. Amazon.com) and once for the organization's customers.
+
+2. Attempt to reverse engineer what you can about the site, from the site interface and any available information that you can find on the Internet or elsewhere. 
+
+3. Include specific recommendations about how to improve the site's recommendation capabilities going forward.
+
+4. Create your report using an R Markdown file, and create a discussion thread with a link to the GitHub repo where your Markdown file notebook resides.  You are not expected to need to write code for this discussion assignment.
+
+## Response:
+
+For my response, I will focus on Reddit's recommender system.
+
+1. a) Scenario design analysis for Reddit users:
+
+> Who are your target users?
+
+My target users are people who browse Reddit.
+
+> What are their key goals?
+
+The only goal of the vast majority of the Reddit users is entertainment.
+
+> How can you help them accomplish those goals?
+
+I can make sure that their feed contains content that is entertaining to them.
+
+b) Scenario design analysis for Reddit the organization:
+
+> Who are your target users?
+
+My target user is Reddit.
+
+> What are their key goals?
+
+Reddit's key goal is short and long-term user retention. They want people to browse Reddit for as long as possible in one sitting, and they want those people to come back for other sessions once they leave.
+
+> How can you help them accomplish those goals?
+
+I can design a recommender system that keeps Reddit users hooked with content personalized for them so that they spend a lot of time on the site daily.
+
+2. According to this (article)[https://www.socialmediatoday.com/news/reddit-looks-to-improve-content-discovery-with-algorithm-defined-best-lis/603446/], it seems that Reddit has multiple recommendation algorithms per sorting option. There are a bunch of sorting options: "Hot", "New", "Top", "Controversial", "Rising", and "Best". The default sorting option is "Best". Its algorithms seem to take into account "personal engagement signals." These signals can be anything from the user's upvotes and downvotes to their explicit interactions (like "show me more of this" or "hide posts like this") with the algorithms. I think it's very interesting that Reddit insulated the algorithms of its "Best" option from the other options: "All of Reddit’s other feed sorting options will not be impacted by the change". It does make sense to insulate the options because if they become too similar to each other then there would be no point in having multiple options.
+
+3. I think Reddit's recommender system can be improved by making the interface less clunky. It's much more likely that people will continue to look at their recommendations if they don't have to fight against the UI. In particular, my frustrations are aimed at Reddit's terrible video playback and preview options.
