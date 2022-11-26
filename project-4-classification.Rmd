@@ -1,0 +1,181 @@
+---
+title: "Project 4 | Document Classification"
+author: "Prinon Mahdi"
+output:
+  html_document:
+    latex_engine: xelatex
+    toc: true
+urlcolor: blue
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Introduction
+
+This project involves the creation of a classification system such that text messages or e-mails can be identified as either spam or ham. In other words, the intent is to create a functioning spam filter. There are multiple ways to achieve this. In this project, a random forest model will be used in accordance with a guide found [here](https://kharshit.github.io/blog/2017/08/25/email-spam-filtering-text-analysis-in-r). Additionally, the training and testing data is taken from [kaggle](https://www.kaggle.com/datasets/uciml/sms-spam-collection-dataset), and is imported into R from my GitHub for ease of access. The data contains text messages labeled as either *spam* or *ham*.
+
+So, let's just import all the required data and libraries:
+
+```{r}
+# Importing libraries
+library(tidyverse)
+library(tm)
+library(caTools)
+library(randomForest)
+
+# Importing training/testing data that is labeled spam/ham
+df <- read_csv('https://raw.githubusercontent.com/pmahdi/cuny-data-607/main/spam-project-4.csv')
+```
+
+## Pre-processing the data
+
+```{r}
+glimpse(df)
+```
+
+#### Managing missing values
+
+Looks like the last 3 columns only have missing values. Let's make sure that's the case and then drop them.
+
+```{r}
+df %>% 
+  apply(MARGIN = 2, FUN = is.na) %>% 
+  apply(MARGIN = 2, FUN = sum)  # Looks like last 3 columns are mostly empty
+
+# Dropping those columns
+df <- df %>% 
+  select(1:2)
+
+glimpse(df)
+```
+
+#### Adding column names
+
+Now, let's change the columns names to better reflect the variables they represent.
+
+```{r}
+names(df) <- c('label', 'text')
+
+names(df)
+```
+
+#### Removing problematic special characters
+
+```{r}
+df$text <- sapply(df$text, function(x) iconv(x, "ASCII", "UTF-8", sub = "byte"))
+```
+
+## Creating and processing the corpus
+
+Creating the corpus means converting `df` to a class that is compatible with all the processing functions available to an NLP package. In this project, the package `tm` will be used. So, the corpus that is created will be compatible with the functions found in the `tm` package.
+
+#### Corpus creation
+
+```{r}
+df_corpus <- VCorpus(VectorSource(df$text))
+```
+
+#### Removing stop words
+
+Stop words are words that are more important for syntax than semantics. As in, they are function words that express the relationship between the content words, which carry the semantic meaning of the text. AS such, they can be treated as unimportant noise when trying to classify text.
+
+```{r}
+df_corpus <- tm_map(df_corpus, removeWords, stopwords("en"))
+```
+
+#### Removing punctuation
+
+Punctuation should be removed because they are also syntactical in function, and we are concerned with semantics.
+
+```{r}
+df_corpus <- tm_map(df_corpus, removePunctuation)
+```
+
+#### Converting all words to lowercase
+
+Converting all the words to lowercase is a normalizing step. Case does not distinguish words: a word is semantically the same regardless of case.
+
+```{r}
+df_corpus <- tm_map(df_corpus, content_transformer(tolower))
+```
+
+#### Stemming all the remaining words
+
+Stemming is a natural language processing technique that converts inflected words to their root forms. It is an important step for normalizing the text.
+
+```{r}
+df_corpus <- tm_map(df_corpus, stemDocument)
+```
+
+## Pre-modeling preparations
+
+Although the corpus has been processed, now some other measures must be taken before random forest modeling can be done.
+
+#### Converting the processed corpus to a data frame
+
+Now that the pre-processing is done, the corpus needs to be converted to a data frame because it is not a suitable structure for the following requirements. Firstly, the word frequencies for each message are needed as well as its ham/spam label. Additionally, very infrequent words should be removed from the messages because they are not useful in the classification process. To that end, words that appear in at least 1% of the messages are to be kept. Overall, these requirements are best represented through a rectangular data structure.
+
+```{r}
+# DocumentTermMatrix is an object whereby the rows correspond to messages, and the columns correspond to word frequencies
+df_dtm <- DocumentTermMatrix(df_corpus)
+
+# Removing very infrequent words, keeping only those that appear in at least 1% of messages
+df_dtm <- removeSparseTerms(df_dtm, 0.99)
+
+# Converting to data frame
+df_freq <- as.data.frame(as.matrix(df_dtm))
+colnames(df_freq) <- make.names(colnames(df_dtm))  # This modifies column names starting with a digit
+
+# Adding back the spam/ham label of each message
+df_freq <- df_freq %>% 
+  mutate(label = df$label, .before = alreadi)
+```
+
+#### Creating the train/test split
+
+`df_freq` has to be split into a training and a testing group.
+
+```{r}
+df_freq$label <- as.factor(df_freq$label)  # Converting the label variable to a factor
+
+set.seed(1992)
+split <- sample.split(df_freq$label, 0.7)
+train <- subset(df_freq, split == TRUE)
+test <- subset(df_freq, split == FALSE)
+```
+
+With the training and testing datasets constructed, it is time to model the data.
+
+## Random forest model for spam-ham filtering
+
+#### Creating the model
+
+```{r}
+model <- randomForest(label ~ ., data = train)
+```
+
+#### Prediction on training data
+
+```{r}
+pred_train <- predict(model, type = 'prob')[, 2]
+
+table(train$label, pred_train > 0.5)
+training_acc <- (3346 + 427) / nrow(train)  # Training set accuracy
+```
+
+#### Prediction on testing data
+
+```{r}
+pred_test <- predict(model, newdata = test, type = 'prob')[, 2]
+
+table(test$label, pred_test > 0.5)
+testing_acc <- (1433 + 174) / nrow(test)  # Testing set accuracy
+```
+
+#### Conclusion
+
+The training set's accuracy is `r training_acc * 100`%, while the testing set's accuracy is `r testing_acc * 100`%. So, the model performs relatively well in filtering out spam text messages.
