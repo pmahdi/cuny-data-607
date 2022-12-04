@@ -1,0 +1,284 @@
+---
+title: "DATA 607 | Final Project"
+author: "Prinon Mahdi"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+  html_document:
+    latex_engine: xelatex
+    toc: true
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Introduction
+
+## Packages required
+
+```{r}
+library(haven)
+library(tidyverse)
+library(infer)
+library(httr)
+library(jsonlite)
+```
+
+## Premise
+
+This project will answer the research question: **Is smoking independent of gender?**
+
+Data from NYC's Community Health Survey (2020) will be used to answer the question. Moreover, the conclusion will be checked against World Health Organization's data on smoking. Ideally, the 2 datasets will agree on the findings.
+
+## Methodology
+
+Hypothesis testing framework for categorical variables will be used to answer the research question. The variable of *smoker* being categorical also means that the hypotheses will involve proportions rather than means. To be more specific, a difference in the proportions of male and female smokers will indicate that gender makes a difference in whether a person smokes or not. In that case, the variables of *smoker* and *gender* would **not** be independent. However, if a difference in proportions cannot be confirmed, then the variables **can** be considered independent.
+
+## The hypotheses
+
+The hypotheses are, in words:
+
+**Null Hypothesis** The proportion of males who smoke is equal to the proportion of females who smoke.
+
+**Alternative hypothesis** The proportion of males who smoke is not equal to the proportion of females who smoke.
+
+In mathematical notation:
+
+$$H_0: \hat{p}_{male} = \hat{p}_{female}$$
+
+$$H_A: \hat{p}_{male} \neq \hat{p}_{female}$$
+
+# Importing and cleaning the CHS data
+
+```{r}
+# Importing the survey data
+chs_2020_link <- "https://www.nyc.gov/assets/doh/downloads/sas/episrv/chs2020_public.sas7bdat"
+chs_2020 <- read_sas(chs_2020_link)
+
+# Finding column name containing 'smoker'
+colnames(chs_2020) %>% 
+  str_detect(string = ., 
+             pattern = regex(pattern = 'smoker', ignore_case = TRUE)) %>% 
+  subset(x = colnames(chs_2020), subset = .)
+
+# Finding column name containing sex/gender
+colnames(chs_2020) %>% 
+  str_detect(string = ., 
+             pattern = regex(pattern = '(sex|gender)', ignore_case = TRUE)) %>% 
+  subset(x = colnames(chs_2020), subset = .)
+
+# Subsetting the relevant columns: smoker and birthsex
+chs_smoker <- chs_2020 %>% 
+  select(birthsex, smoker) %>% 
+  drop_na() %>% 
+  mutate(birthsex = if_else(birthsex == 1, 'male', 'female'), 
+         smoker = if_else(smoker == 1, 'no', 'yes'))
+```
+
+The *birthsex* and *smoker* variables have been recoded using the available [codebook](https://www.nyc.gov/assets/doh/downloads/pdf/episrv/chs2020-codebook.pdf) for CHS (2020). Additionally, all smokers (current and former) are being considered as such because the research question is not about whether gender has an effect on quitting smoking. Rather, it is focused on whether one gender is more likely to pick up the habit.
+
+# Doing the hypothesis test
+
+## Clearing the requirements
+
+There are two requirements that must be satisfied before using the hypothesis testing framework for a difference of two proportions. The first requirement is independence. In other words, the observations belonging to each group (male and female in this case) must be independent within and between the groups. Usually, a random sample ensures independence. In the case of the Community Health Survey (2020), stratified **random** sampling is the stated [sampling methodology](https://www.nyc.gov/site/doh/data/data-sets/community-health-survey-methodology.page), so independence can be assumed. The second requirement is the success-failure condition. To elaborate, the sample size has to be large enough such that it is reasonable to expect at least 10 successes and 10 failures in each group. In the given context, success is a value of "yes" for the variable *smoker*, and failure is "no". Before calculating whether this requirement is met, it makes sense to check the requirement visually using the actual data.
+
+```{r}
+chs_smoker %>% ggplot(mapping = aes(x = birthsex, fill = smoker)) + 
+  geom_bar()
+```
+
+The bar chart of the actual data implies that the success-failure condition should be satisfied with ease. In order to confirm with a calculation, the pooled proportion statistic has to be used because in this particular hypothesis test, the null hypothesis states that the difference between the proportions is 0.
+
+```{r}
+pooled_prop <- sum(chs_smoker$smoker == 'yes') / nrow(chs_smoker)
+males <- sum(chs_smoker$birthsex == 'male')
+females <- sum(chs_smoker$birthsex == 'female')
+
+# Theoretical successes and failures in the male group
+# Successes
+pooled_prop * males
+# Failures
+(1 - pooled_prop) * males
+
+# Theoretical successes and failures in the female group
+# Successes
+pooled_prop * females
+# Failures
+(1 - pooled_prop) * females
+```
+
+Clearly, the intuition from the visualization was correct. The theoretical numbers for successes and failures, if the null hypothesis were true, are all greater than 10.
+
+## Hypothesis testing with a calculated null distribution
+
+The hypothesis testing framework involves the identification of a p-value for the point estimate calculated from the sample data. The p-value signifies the likelihood of getting a point estimate as extreme or more extreme (than the one calculated from the sample data) given that the null hypothesis is true. If the p-value value is smaller than a pre-determined significance level, then the null hypothesis is rejected because if it were true then the point estimate would be one with a higher p-value.
+
+With the aforementioned context in mind, it is clear that the null distribution plays a key role in hypothesis testing. The null distribution is just a normal distribution with a certain mean and standard error. For this particular test, the mean is 0 because the null hypothesis states that the difference between the proportions is 0. However, the standard error is not yet known, and therefore it must be calculated. The other option would have been to create a null distribution by running a simulation, which will be done in the next section as an alternative method of hypothesis testing.
+
+```{r}
+se <- sqrt(pooled_prop * (1 - pooled_prop) / males + 
+             pooled_prop * (1 - pooled_prop) / females)
+```
+
+With the standard error calculated, it is time to set a significance level. As the consequence of a type I error is not disastrous for this particular research question, a significance level of $\alpha = 0.1$ is appropriate. So, if the p-value of the point estimate (the difference between the proportion of male smokers and the proportion of female smokers) is lower than 0.1, the null hypothesis will be rejected.
+
+```{r}
+males_prop <- chs_smoker %>% 
+  filter(birthsex == 'male', smoker == 'yes') %>% 
+  nrow() / males
+
+females_prop <- chs_smoker %>% 
+  filter(birthsex == 'female', smoker == 'yes') %>% 
+  nrow() / females
+
+diff_prop <- males_prop - females_prop
+
+p_value <- pnorm(q = diff_prop, mean = 0, sd = se, lower.tail = FALSE) * 2
+```
+
+The p-value is `r p_value`, which is lower than the significance level of 0.1. Therefore, the null hypothesis is rejected in favor of the alternative hypothesis that the proportion of males who smoke is not equal to the proportion of females who smoke. In fact, as the difference is positive, it can be concluded that there is statistically significant evidence that the proportion of males who smoke is greater than the proportion of females who smoke. As such, the answer to the research question is that smoking is **not** independent of gender. Males are more likely to be smokers.
+
+## Hypothesis testing with a simulated null distribution
+
+In the previous section, a hypothesis test was performed by calculating the standard error using the pooled proportion statistic so that the null distribution could be defined with that standard error. However, the null distribution can also be simulated by randomly distributing the success counts ("yes" response under the *smoker* variable) between the two groups (male and female) many times. For each time this is done, a difference of proportions is recorded, and the distribution of those differences simulate the null distribution. In this section, this simulation process will be carried out to perform the hypothesis test using the `infer` package.
+
+```{r}
+null_dist <- chs_smoker %>% 
+  specify(explanatory = birthsex, 
+          response = smoker, 
+          success = 'yes') %>% 
+  hypothesize(null = 'independence') %>% 
+  generate(reps = 1000, type = 'permute') %>% 
+  calculate(stat = 'diff in props', order = c('male', 'female'))
+
+glimpse(null_dist)
+```
+
+As the null distribution has been simulated successfully, it is now possible to obtain the p-value of the actual difference of proportions.
+
+```{r}
+p_val <- null_dist %>% 
+  get_p_value(obs_stat = diff_prop, direction = 'two_sided')
+
+p_val
+```
+
+The p-value is so small that it is virtually 0. The `infer` package makes it very easy to also visualize this.
+
+```{r}
+null_dist %>% 
+  visualize() + 
+  shade_p_value(diff_prop, direction = 'two-sided')
+```
+
+The visual really drives home the point that the observed difference is so extreme that the underlying assumption of the validity of the null hypothesis must be false. Therefore, using the simulated null distribution, the null hypothesis must again be rejected in favor of the alternative hypothesis. That is, there is statistically significant evidence to suggest that the proportion of males who smoke is greater than the proportion of females who smoke.
+
+# Verifying the conclusion with World Health Organization's data on smoking
+
+World Health Organization has a vast repository of data from many countries collected over many years. Its data on smoking can be summarized in order to see if the conclusion of the hypothesis tests is consistent with that summary.
+
+## Writing a function to interface with WHO's GHO OData API
+
+```{r}
+api_df <- function(url) {
+  fromJSON(
+    rawToChar(
+      GET(url)$content
+      )
+    )$value
+}
+```
+
+## Fetching the necessary metadata
+
+According to [WHO's instructions](https://www.who.int/data/gho/info/gho-odata-api), in order to retrieve the desired information about smoking, it is necessary to first figure out the relevant metadata. To be more specific, the data is organized by indicators and dimensions. Dimensions seem to be grouping variables like *year* and *sex* while indicators seem to be the variables with actual data of interest. In this case, the dimension of interest would be sex, and the indicator of interest would be smoking.
+
+```{r}
+# All the dimensions are listed in dimensions data frame
+dim_url <- 'https://ghoapi.azureedge.net/api/Dimension'
+dimensions <- api_df(url = dim_url)
+
+# All the indicators are listed in the indicators data frame
+ind_url <- 'https://ghoapi.azureedge.net/api/Indicator'
+indicators <- api_df(url = ind_url)
+
+# Looking at the column names of the 2 data frames
+glimpse(dimensions)
+glimpse(indicators)
+
+# Finding the dimensions that have sex/gender in the name
+sex_dimensions <- dimensions$Title %>% 
+  str_which(string = ., 
+            pattern = regex(pattern = '(sex|gender)', 
+                            ignore_case = TRUE)) %>% 
+  dimensions[., ]
+
+# Finding the indicators that have smoke or smoking in the name
+smoking_indicators <- indicators$IndicatorName %>% 
+  str_which(string = ., pattern = 'smok(e|ing)') %>% 
+  indicators[., ]
+```
+
+Looking through the data frames `sex_dimensions` and `smoking_indicators`, it becomes clear that the desired dimension name is, perhaps obviously, sex, and the desired indicator is, not so obviously as there are many matches, M_Est_cig_curr (estimate of current cigarette smoking prevalence %). Now, the codes for sorting by male and female sexes separately are needed.
+
+```{r}
+sex_url <- 'https://ghoapi.azureedge.net/api/DIMENSION/SEX/DimensionValues'
+sex_values <- api_df(url = sex_url)
+
+knitr::kable(sex_values)  # The codes are MLE for male and FMLE for female
+```
+
+Finally all the needed metadata are known to construct the correct URLs to fetch the desired data.
+
+## Fetching the worldwide smoking data for males and females for the year 2020
+
+```{r}
+male_smokers_url = 
+  'https://ghoapi.azureedge.net/api/M_Est_cig_curr?$filter=Dim1%20eq%20%27MLE%27%20and%20year(TimeDimensionBegin)%20eq%202020'
+male_smokers_percent <- api_df(url = male_smokers_url)
+
+female_smokers_url = 
+  'https://ghoapi.azureedge.net/api/M_Est_cig_curr?$filter=Dim1%20eq%20%27FMLE%27%20and%20year(TimeDimensionBegin)%20eq%202020'
+female_smokers_percent <- api_df(url = female_smokers_url)
+
+glimpse(male_smokers_percent)
+glimpse(female_smokers_percent)
+```
+
+## Joining WHO's smoking data for males and females
+
+The structure of both data frames is expectantly identical. So, they can be joined on the column *SpatialDim*, which stores the country designation for each observation. Then, a new column can be added and populated by the difference of proportions statistic (male proportion - female proportion). Finally, that column can be summarized so that a comparison can be made between the summary and the conclusion of the hypothesis tests.
+
+It is important to note that the male and female proportions are recorded as percentages, so each difference has to be divided by 100 to get a corresponding proportion statistic.
+
+```{r}
+joined_smokers_percent <- inner_join(
+  x = male_smokers_percent[, c('SpatialDim', 'NumericValue')], 
+  y = female_smokers_percent[, c('SpatialDim', 'NumericValue')], 
+  by = 'SpatialDim', 
+  suffix = c('.m', '.f')
+)
+
+joined_smokers_percent <- joined_smokers_percent %>% 
+  mutate(difference = (NumericValue.m - NumericValue.f) / 100) %>% 
+  arrange(desc(difference))
+
+glimpse(joined_smokers_percent)
+```
+
+## Conclusion
+
+To summarize the *difference* variable, first let's visualize the distribution.
+
+```{r}
+joined_smokers_percent %>% 
+  ggplot(mapping = aes(x = difference)) + 
+  geom_histogram(binwidth = 0.01, color = 'purple', fill = 'salmon') + 
+  xlab(label = 'difference between proportions of males and females who smoke')
+```
+
+Looking at the histogram, it is clear to see that the majority of the values are positive (bars to the right of 0). So, for most countries, the proportion of males who smoke is greater than the proportion of females who smoke. There is a strong right skew in the data, so central tendency would be best described by the **median** statistic rather than the mean. The median is `r joined_smokers_percent %>% median(x = .$difference, na.rm = TRUE)`. This value also demonstrates that there is significant difference between the proportions (13.2% is a sizable margin). Interestingly, the median from WHO's data is comparable to the point estimate derived from the CHS data: `r joined_smokers_percent %>% median(x = .$difference, na.rm = TRUE)` vs `r diff_prop`. Overall, the global smoking data from WHO is certainly consistent with the previous findings of the hypothesis tests. There is strong evidence that smoking is not independent of gender, and that males are more likely to be smokers than females.
